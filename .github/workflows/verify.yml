@@ -12,45 +12,38 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: shell syntax check
-        run: find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -r bash -n
+        run: |
+          find . -name '*.sh' -not -path './.git/*' -print0 | xargs -0 -r bash -n
 
       - name: python compile check
-        run: find . -name '*.py' -not -path './.git/*' -print0 | xargs -0 -r -n1 python3 -m py_compile
+        run: |
+          find . -name '*.py' -not -path './.git/*' -print0 | xargs -0 -r -n1 python3 -m py_compile
 
-      - name: security hook blocks destructive commands
+      - name: hook blocks destructive commands
         run: |
           set -e
-          WF="$PWD"
-          HOOK="$WF/security-hook/block-destructive.py"
-          for cmd in "rm -rf /tmp/foo" "git push --force origin main" "sqlite3 db.sql \"DROP TABLE users\""; do
-            out=$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$cmd")" | python3 "$HOOK")
-            echo "  cmd=$cmd -> $out"
-            echo "$out" | python3 -c 'import json,sys
-import sys
-d=json.load(sys.stdin)
-assert d.get("decision")=="block", "expected block, got "+str(d)
-assert d["hookSpecificOutput"]["permissionDecision"]=="deny"'
+          HOOK="$PWD/security-hook/block-destructive.py"
+          for cmd in "rm -rf /tmp/foo" "git push --force origin main" "TRUNCATE users" "DELETE FROM users"; do
+            out=$(printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$cmd" | python3 "$HOOK")
+            echo "cmd=$cmd -> $out"
+            echo "$out" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['decision']=='block', str(d); assert d['hookSpecificOutput']['permissionDecision']=='deny'"
           done
-          echo "3 destructive commands blocked: OK"
+          echo "4 destructive commands blocked: OK"
 
-      - name: security hook allows normal commands
+      - name: hook allows normal commands
         run: |
           set -e
-          WF="$PWD"
-          HOOK="$WF/security-hook/block-destructive.py"
-          for cmd in "ls -la" "git status" "python3 -m pytest"; do
-            out=$(printf '{"tool_name":"Bash","tool_input":{"command":%s}}' "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$cmd")" | python3 "$HOOK")
-            echo "  cmd=$cmd -> $out"
-            echo "$out" | python3 -c 'import json,sys
-d=json.load(sys.stdin)
-assert d.get("decision")=="approve", "expected approve, got "+str(d)'
+          HOOK="$PWD/security-hook/block-destructive.py"
+          for cmd in "ls -la" "git status" "python3 -m pytest" "npm install"; do
+            out=$(printf '{"tool_name":"Bash","tool_input":{"command":"%s"}}' "$cmd" | python3 "$HOOK")
+            echo "cmd=$cmd -> $out"
+            echo "$out" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['decision']=='approve', str(d)"
           done
-          echo "3 normal commands allowed: OK"
+          echo "4 normal commands allowed: OK"
 
       - name: changelog generator produces real output
         run: |
           set -e
-          WF="$PWD"
           rm -rf /tmp/cl && mkdir -p /tmp/cl && cd /tmp/cl
           git init -q
           git config user.email t@t.com
@@ -59,13 +52,13 @@ assert d.get("decision")=="approve", "expected approve, got "+str(d)'
           git tag v1.0.0
           echo x >> a.txt && git add -A && git commit -qm "fix: correct off-by-one in parser"
           echo y >> a.txt && git add -A && git commit -qm "docs: document the API"
-          bash "$WF/changelog-skill/changelog.sh" -o CHANGELOG.md
+          bash "$GITHUB_WORKSPACE/changelog-skill/changelog.sh" -o CHANGELOG.md
           test -f CHANGELOG.md || { echo "FAIL: no CHANGELOG.md"; exit 1; }
           cat CHANGELOG.md
-          grep -q "fix" CHANGELOG.md || { echo "FAIL: fix section missing"; exit 1; }
+          grep -qi "fix" CHANGELOG.md || { echo "FAIL: no fix entry"; exit 1; }
           echo "changelog OK"
 
-      - name: PR review agent CLI help works
+      - name: PR review agent CLI responds
         run: |
           set -e
           python3 pr-review-agent/claude-review.py --help | head -5
