@@ -1,5 +1,8 @@
 # Claude Code Toolkit
 
+[![CI](https://github.com/Zhiyilang/claude-code-toolkit/actions/workflows/verify.yml/badge.svg)](https://github.com/Zhiyilang/claude-code-toolkit/actions/workflows/verify.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 A small, zero-dependency collection of drop-in tools that make **Claude Code** (and any agentic coding setup) safer, faster, and more reviewable.
 
 Every tool is:
